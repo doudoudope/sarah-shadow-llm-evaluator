@@ -1,0 +1,10 @@
+.env
+.env.example
+.git
+.gitignore
+documents/
+tests/
+pytest.ini
+__pycache__
+*.pyc
+*.pyo
