@@ -1,0 +1,3 @@
+# Claude Code local files (project settings.json is tracked)
+.claude/*
+!.claude/settings.json
