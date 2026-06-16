@@ -6,3 +6,5 @@ pytest-asyncio
 pydantic-settings
 python-dotenv
 anyio[asyncio]
+redis[asyncio]
+fakeredis

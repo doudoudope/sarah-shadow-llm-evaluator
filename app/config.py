@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     candidate_llm_url: str = "http://localhost:8000/mock/candidate"
     candidate_timeout_seconds: float = 10.0
     log_level: str = "INFO"
+    redis_url: str = "redis://localhost:6379"
 
     model_config = {"env_file": ".env"}
 

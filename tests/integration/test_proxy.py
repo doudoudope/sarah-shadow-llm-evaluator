@@ -10,14 +10,6 @@ from app.services.worker import shadow_worker
 
 
 @pytest.fixture(autouse=True)
-def reset_metrics():
-    metrics.total = 0
-    metrics.matches = 0
-    metrics.mismatches = 0
-    yield
-
-
-@pytest.fixture(autouse=True)
 async def app_with_worker():
     queue = asyncio.Queue()
     app.state.shadow_queue = queue
@@ -81,8 +73,9 @@ async def test_mismatch_updates_metrics(app_with_worker):
             await client.post("/proxy", json={"prompt": "test"})
             await app_with_worker.join()
 
-    assert metrics.mismatches == 1
-    assert metrics.matches == 0
+    stats = await metrics.get_stats()
+    assert stats["mismatches"] == 1
+    assert stats["matches"] == 0
 
 
 async def test_metrics_match_rate(app_with_worker):
