@@ -153,6 +153,50 @@ Tests use `fakeredis` — no real Redis instance required to run tests.
 
 ---
 
+## Production Testing
+
+Live app: `https://sarah-app-pab55.ondigitalocean.app`
+
+**Health check**
+```bash
+curl https://sarah-app-pab55.ondigitalocean.app/health
+```
+
+**Send a prompt**
+```bash
+curl -X POST https://sarah-app-pab55.ondigitalocean.app/proxy \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "What is the capital of France?"}'
+```
+
+**Check metrics**
+```bash
+curl https://sarah-app-pab55.ondigitalocean.app/metrics
+```
+
+**Trigger a mismatch** — candidate mock returns a different answer:
+```bash
+for i in 1 2 3; do
+  curl -s -X POST https://sarah-app-pab55.ondigitalocean.app/proxy \
+    -H "Content-Type: application/json" \
+    -d '{"prompt": "test"}' | jq .
+done
+curl https://sarah-app-pab55.ondigitalocean.app/metrics
+```
+
+**Prove latency isolation** — proxy returns fast even with slow candidate:
+```bash
+time curl -X POST "https://sarah-app-pab55.ondigitalocean.app/mock/candidate?delay_ms=3000" \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "test"}'
+
+time curl -X POST https://sarah-app-pab55.ondigitalocean.app/proxy \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "test"}'
+```
+
+---
+
 ## Production Improvements (Phase 3)
 
 | Improvement | Why |
