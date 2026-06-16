@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import uuid
 
@@ -25,10 +26,13 @@ async def proxy(request: Request, body: PromptRequest):
         raise HTTPException(status_code=502, detail="Primary LLM unavailable")
 
     primary_output = primary_response.get("output", "")
-    request.app.state.shadow_queue.put_nowait({
-        "request_id": request_id,
-        "prompt": body.prompt,
-        "primary_output": primary_output,
-    })
+    try:
+        request.app.state.shadow_queue.put_nowait({
+            "request_id": request_id,
+            "prompt": body.prompt,
+            "primary_output": primary_output,
+        })
+    except asyncio.QueueFull:
+        logger.warning("Shadow queue full, dropping shadow task request_id=%s", request_id)
 
     return primary_response

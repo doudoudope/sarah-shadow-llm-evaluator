@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     candidate_timeout_seconds: float = 10.0
     log_level: str = "INFO"
     redis_url: str = "redis://localhost:6379"
+    shadow_queue_maxsize: int = 1000
 
     model_config = {"env_file": ".env"}
 

@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    queue = asyncio.Queue()
+    queue = asyncio.Queue(maxsize=settings.shadow_queue_maxsize)
     app.state.shadow_queue = queue
     worker_task = asyncio.create_task(shadow_worker(queue))
     logger.info("Shadow LLM Evaluator started")
