@@ -8,6 +8,7 @@ async def call_primary(prompt: str) -> dict:
         response = await client.post(
             settings.primary_llm_url,
             json={"prompt": prompt},
+            timeout=settings.primary_timeout_seconds,
         )
         response.raise_for_status()
         return response.json()
