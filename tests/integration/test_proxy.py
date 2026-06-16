@@ -6,6 +6,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.main import app
 from app.metrics import metrics
+from app.services.worker import shadow_worker
 
 
 @pytest.fixture(autouse=True)
@@ -16,7 +17,18 @@ def reset_metrics():
     yield
 
 
-async def test_proxy_returns_primary_response():
+@pytest.fixture(autouse=True)
+async def app_with_worker():
+    queue = asyncio.Queue()
+    app.state.shadow_queue = queue
+    task = asyncio.create_task(shadow_worker(queue))
+    yield queue
+    await queue.put(None)
+    await queue.join()
+    await task
+
+
+async def test_proxy_returns_primary_response(app_with_worker):
     with patch("app.services.llm_client.call_primary", new_callable=AsyncMock) as mock_primary, \
          patch("app.services.llm_client.call_candidate", new_callable=AsyncMock) as mock_candidate:
         mock_primary.return_value = {"model": "primary", "output": "Paris"}
@@ -24,12 +36,13 @@ async def test_proxy_returns_primary_response():
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
             r = await client.post("/proxy", json={"prompt": "What is the capital of France?"})
+            await app_with_worker.join()
 
     assert r.status_code == 200
     assert r.json() == {"model": "primary", "output": "Paris"}
 
 
-async def test_proxy_fast_when_candidate_slow():
+async def test_proxy_fast_when_candidate_slow(app_with_worker):
     async def slow_candidate(prompt):
         await asyncio.sleep(0.5)
         return {"model": "candidate", "output": "Paris"}
@@ -45,19 +58,20 @@ async def test_proxy_fast_when_candidate_slow():
     assert r.json()["model"] == "primary"
 
 
-async def test_candidate_failure_does_not_fail_proxy():
+async def test_candidate_failure_does_not_fail_proxy(app_with_worker):
     with patch("app.services.llm_client.call_primary", new_callable=AsyncMock) as mock_primary, \
          patch("app.services.llm_client.call_candidate", side_effect=Exception("candidate down")):
         mock_primary.return_value = {"model": "primary", "output": "Paris"}
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
             r = await client.post("/proxy", json={"prompt": "test"})
+            await app_with_worker.join()
 
     assert r.status_code == 200
     assert r.json()["model"] == "primary"
 
 
-async def test_mismatch_updates_metrics():
+async def test_mismatch_updates_metrics(app_with_worker):
     with patch("app.services.llm_client.call_primary", new_callable=AsyncMock) as mock_primary, \
          patch("app.services.llm_client.call_candidate", new_callable=AsyncMock) as mock_candidate:
         mock_primary.return_value = {"model": "primary", "output": "Paris"}
@@ -65,12 +79,13 @@ async def test_mismatch_updates_metrics():
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
             await client.post("/proxy", json={"prompt": "test"})
+            await app_with_worker.join()
 
     assert metrics.mismatches == 1
     assert metrics.matches == 0
 
 
-async def test_metrics_match_rate():
+async def test_metrics_match_rate(app_with_worker):
     with patch("app.services.llm_client.call_primary", new_callable=AsyncMock) as mock_primary, \
          patch("app.services.llm_client.call_candidate", new_callable=AsyncMock) as mock_candidate:
         mock_primary.return_value = {"model": "primary", "output": "Paris"}
@@ -79,9 +94,11 @@ async def test_metrics_match_rate():
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
             for _ in range(3):
                 await client.post("/proxy", json={"prompt": "test"})
+            await app_with_worker.join()  # ensure 3 matches processed before changing mock
 
             mock_candidate.return_value = {"model": "candidate", "output": "Lyon"}
             await client.post("/proxy", json={"prompt": "test"})
+            await app_with_worker.join()
 
             r = await client.get("/metrics")
 
